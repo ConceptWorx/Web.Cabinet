@@ -1,91 +1,91 @@
-<?
+<?php
 /**
- * Функция загрузки скина на сервер
- * =======================================================
- * Автор:	GamerVII
- * URL:  	https://vk.com/gamervii
- * email:	gamervii.phone@gmail.com
- * =======================================================
- * Файл:  skinupload.php
- * -------------------------------------------------------
- * Версия: 1.2.2 (05.07.2019)
- * =======================================================
+ * Загрузка скина (PHP 8.3 compatible)
  */
 
-if (!defined('DATALIFEENGINE')) die("Error!");
-
-$privilage = $db->super_query("SELECT * FROM `cabinet_permissions` WHERE `name` = '{$member_id['name']}'");
-
-$uploadHDSkin = $privilage['hd_skin'];
-
-$redirect = "http://".$_SERVER['HTTP_HOST']."/cabinet.html";
-
-if (isset($_FILES['skin'])) {
-
-	$username = $member_id['name'];
-	$fileName = $_FILES['skin']['name'];
-	$fileSize = $_FILES['skin']['size'];
-	$fileTmp = $_FILES['skin']['tmp_name'];
-	$fileType = $_FILES['skin']['type'];
-	$fileExt = strtolower(end(explode('.', $_FILES['skin']['name'])));
-	$imageSkinInfo = getimagesize($_FILES['skin']['tmp_name']);
-
-	if ($fileType == null) {
-		dumpErrors("Ошибка", "Вы не выбрали файл для загрузки");
-		header("Location: $redirect");
-	}elseif ($fileType == "image/png") {
-		if ($uploadHDSkin == 1) {
-			if ($imageSkinInfo["0"] == "64" || $imageSkinInfo["0"] == "1024" || $imageSkinInfo["0"] == "256" || $imageSkinInfo["0"] == "1023" || $imageSkinInfo["0"] == "512") {
-				if ($imageSkinInfo["1"] == "32" || $imageSkinInfo["1"] == "64" || $imageSkinInfo["1"] == "512" || $imageSkinInfo["1"] == "128" || $imageSkinInfo["1"] == "256") {
-					move_uploaded_file($fileTmp, "./recloud/modules/cabinet/uploads/skins/". $username .".png");
-
-					dumpErrors("Успешно", "Скин успешно загружен");
-					header("Location: $redirect");
-				}else{
-					dumpErrors("Ошибка", "Неверный размер скина");
-					header("Location: $redirect");
-				}
-			}else{
-				dumpErrors("Ошибка", "Неверный размер скина");
-				header("Location: $redirect");
-			}
-		}else{
-			if ($imageSkinInfo["0"] == "64") {
-				if ($imageSkinInfo["1"] == "32") {
-					move_uploaded_file($fileTmp, "./recloud/modules/cabinet/uploads/skins/". $username .".png");
-
-					dumpErrors("Успешно", "Скин успешно загружен");
-					header("Location: $redirect");
-				}else{
-					dumpErrors("Ошибка", "Неверный размер скина, или вы пытаетесь загрузить HD скин");
-					header("Location: $redirect");
-				}
-			}else{
-				dumpErrors("Ошибка", "Неверный размер скина, или вы пытаетесь загрузить HD скин");
-				header("Location: $redirect");
-			}
-		}
-	}else{
-		dumpErrors("Ошибка", "Файл должен быть в формате png");
-		header("Location: $redirect");
-	}
-
+if (!defined('DATALIFEENGINE')) {
+    http_response_code(403);
+    exit('Access denied');
 }
 
-?>
+if (!isset($member_id['name'])) {
+    header("Location: /");
+    exit;
+}
 
-<form id="skinUpload" action method="post" enctype="multipart/form-data">
-	<div class="row cabinet-file-upload">
-		<div class="col-xl-6 col-md-12">
-			<div class="cabinet-form-group">
-				<input type="file" name="skin" id="sortpictureSkin" class="input-file">
-				<label for="sortpictureSkin" class="cabinet-file js-labelFile mb-2">
-					<span class="js-fileName">Выбрать скин</span>
-				</label>
-			</div>
-		</div>
-		<div class="col-xl-6 col-md-12">
-			<input id="uploadSkin" type="submit" value="Загрузить" class="cabinet-buttons">
-		</div>
-	</div>
-</form>
+$redirect = CABINET_URL;
+
+// Проверка файла
+if (
+    !isset($_FILES['skin']) ||
+    $_FILES['skin']['error'] !== UPLOAD_ERR_OK ||
+    empty($_FILES['skin']['tmp_name'])
+) {
+    dumpErrors("Ошибка", "Файл не был загружен");
+    header("Location: $redirect");
+    exit;
+}
+
+// MIME-проверка
+$mime = mime_content_type($_FILES['skin']['tmp_name']);
+if ($mime !== 'image/png') {
+    dumpErrors("Ошибка", "Файл должен быть в формате PNG");
+    header("Location: $redirect");
+    exit;
+}
+
+// Проверка изображения
+$imageInfo = getimagesize($_FILES['skin']['tmp_name']);
+if ($imageInfo === false) {
+    dumpErrors("Ошибка", "Файл не является изображением");
+    header("Location: $redirect");
+    exit;
+}
+
+$width  = (int)$imageInfo[0];
+$height = (int)$imageInfo[1];
+
+// Права пользователя
+$name = $db->safesql($member_id['name']);
+$privilage = $db->super_query("SELECT * FROM cabinet_permissions WHERE name='{$name}'");
+$uploadHDSkin = (int)($privilage['hd_skin'] ?? 0);
+
+// Проверка размеров
+$allowed = false;
+
+if ($uploadHDSkin === 1) {
+    $allowedWidths  = [64, 128, 256, 512, 1024];
+    $allowedHeights = [32, 64, 128, 256, 512];
+
+    if (in_array($width, $allowedWidths, true) && in_array($height, $allowedHeights, true)) {
+        $allowed = true;
+    }
+} else {
+    if ($width === 64 && $height === 32) {
+        $allowed = true;
+    }
+}
+
+if (!$allowed) {
+    dumpErrors("Ошибка", "Неверный размер скина");
+    header("Location: $redirect");
+    exit;
+}
+
+// Сохранение
+$targetDir = ROOT_DIR . "/recloud/modules/cabinet/uploads/skins/";
+if (!is_dir($targetDir)) {
+    mkdir($targetDir, 0755, true);
+}
+
+$targetFile = $targetDir . $member_id['name'] . ".png";
+
+if (!move_uploaded_file($_FILES['skin']['tmp_name'], $targetFile)) {
+    dumpErrors("Ошибка", "Не удалось сохранить файл");
+    header("Location: $redirect");
+    exit;
+}
+
+dumpErrors("Успешно", "Скин успешно загружен");
+header("Location: $redirect");
+exit;

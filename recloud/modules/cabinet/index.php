@@ -1,90 +1,95 @@
 <?php
 /**
- * Вывод личного кабинета
- * =======================================================
- * Автор:	GamerVII
- * URL:  	https://vk.com/gamervii
- * email:	gamervii.phone@gmail.com
- * =======================================================
- * Файл:  index.php
- * -------------------------------------------------------
- * Версия: 1.4.1 (07.07.2019)
- * =======================================================
+ * Личный кабинет — основной файл
+ * PHP 8.3 compatible
  */
 
-if (!defined('DATALIFEENGINE')) die("Error!");
+if (!defined('DATALIFEENGINE')) {
+    http_response_code(403);
+    exit('Access denied');
+}
 
-define('DIR', $_SERVER['DOCUMENT_ROOT']);
-$name = $member_id['name'];
-$balance = $member_id['balance'];
+if (!isset($member_id['name'])) {
+    header("Location: /");
+    exit;
+}
 
-require "{$_SERVER['DOCUMENT_ROOT']}/recloud/modules/cabinet/core/class/class.connect.php";
-$database = new Database();
+// ------------------------------------------------------------------
+// Константы и пути
+// ------------------------------------------------------------------
+define('CABINET_DIR', ROOT_DIR . '/recloud/modules/cabinet');
+define('CABINET_URL', '/index.php?do=static&page=cabinet');
 
-require "{$_SERVER['DOCUMENT_ROOT']}/recloud/modules/cabinet/config.php";
-require "{$_SERVER['DOCUMENT_ROOT']}/recloud/modules/cabinet/functions/functions.php";
-require "{$_SERVER['DOCUMENT_ROOT']}/recloud/modules/payment/robokassa/robokassa.php";
+$username = $member_id['name'];
+$name     = $db->safesql($username);
 
+// ------------------------------------------------------------------
+// Подключение функций
+// ------------------------------------------------------------------
+require_once CABINET_DIR . '/functions/helpers.php';
+require_once CABINET_DIR . '/functions/permissions.php';
 
-?>
-<link rel="stylesheet" href="/recloud/assets/css/style.css">
-<link rel="stylesheet" href="/recloud/assets/css/grid.css">
-<script src="/recloud/assets/js/scripts.js?v=10"></script>
+// Дополнительные функции подключаем по необходимости
+$action = $_GET['action'] ?? null;
 
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-<script src="https://kit.fontawesome.com/c4e511f3f8.js"></script>
+switch ($action) {
+    case 'upload_skin':
+        require_once CABINET_DIR . '/functions/skinupload.php';
+        return;
 
-<div class="row cabinet-content block-body">
-	<div class="col-xl-6 col-md-12 mb-2">
+    case 'upload_cloak':
+        require_once CABINET_DIR . '/functions/cloakupload.php';
+        return;
 
-		<div class="cabinet-block">
+    case 'balance':
+        require_once CABINET_DIR . '/functions/balance.php';
+        return;
+}
 
-			<div class="2Dskin-viewer mb-3">
-        <?php require_once DIR . "/recloud/modules/cabinet/functions/2Dskinviewer.php"; ?>
-			</div>
+// ------------------------------------------------------------------
+// Получение данных пользователя
+// ------------------------------------------------------------------
 
-			<div class="skin-upload mb-2">
-        <?php require_once DIR . "/recloud/modules/cabinet/functions/skinupload.php"; ?>
-			</div>
+// Баланс
+$balanceRow = $db->super_query("SELECT balance FROM cabinet_balance WHERE name='{$name}'");
+$balance = isset($balanceRow['balance']) ? (float)$balanceRow['balance'] : 0.0;
 
-			<div class="cloak-upload">
-        <?php require_once DIR . "/recloud/modules/cabinet/functions/cloakupload.php"; ?>
-			</div>
+// Права (из permissions.php)
+$hdSkin  = (int)($perm['hd_skin'] ?? 0);
+$hdCloak = (int)($perm['hd_cloak'] ?? 0);
 
-		</div>
+// ------------------------------------------------------------------
+// Проверка файлов пользователя
+// ------------------------------------------------------------------
+$skinPath  = CABINET_DIR . '/uploads/skins/' . $username . '.png';
+$cloakPath = CABINET_DIR . '/uploads/cloaks/' . $username . '.png';
 
-	</div>
-	<div class="col-xl-6 col-md-12 mb-2">
+$hasSkin  = is_file($skinPath);
+$hasCloak = is_file($cloakPath);
 
-		<div class="cabinet-block">
+// ------------------------------------------------------------------
+// Передача данных в шаблон
+// ------------------------------------------------------------------
+$cabinetData = [
+    'username'  => htmlspecialchars($username, ENT_QUOTES, 'UTF-8'),
+    'balance'   => number_format($balance, 2, '.', ''),
+    'hd_skin'   => $hdSkin,
+    'hd_cloak'  => $hdCloak,
+    'has_skin'  => $hasSkin,
+    'has_cloak' => $hasCloak,
+];
 
-			<div class="cabinet-errors">
-        <?php require_once DIR . "/recloud/modules/cabinet/functions/errors.php"; ?>
-			</div>
+// Регистрируем переменные в DLE
+foreach ($cabinetData as $key => $value) {
+    $tpl->set("{cabinet.$key}", (string)$value);
+}
 
-			<div class="cabinet-info">
-        <?php require_once DIR . "/recloud/modules/cabinet/functions/userinfo.php"; ?>
-			</div>
+// ------------------------------------------------------------------
+// Подключение шаблона
+// ------------------------------------------------------------------
+$tpl->load_template('cabinet.tpl');
+$tpl->compile('cabinet');
+$tpl->clear();
 
-		</div>
-
-		<div class="cabinet-block">
-
-			<div class="cabinet-balance">
-        <?php require_once DIR . "/recloud/modules/cabinet/functions/balance.php"; ?>
-			</div>
-
-		</div>
-
-		<div class="cabinet-block">
-
-			<div class="cabinet-rights">
-        <?php require_once DIR . "/recloud/modules/cabinet/functions/rights.php"; ?>
-			</div>
-
-		</div>
-
-
-	</div>
-</div>
+// Вывод
+echo $tpl->result['cabinet'];

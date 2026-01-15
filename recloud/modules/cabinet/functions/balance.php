@@ -1,28 +1,46 @@
 <?php
-if (!defined('DATALIFEENGINE')) die("Error!");
-
 /**
- * Модуль пополнения баланса
- * =======================================================
- * Автор:	GamerVII
- * URL:  	https://vk.com/gamervii
- * email:	gamervii.phone@gmail.com
- * =======================================================
- * Файл:  balance.php
- * -------------------------------------------------------
- * Версия: 1.0.1 (04.07.2019)
- * =======================================================
+ * Работа с балансом (PHP 8.3 compatible)
  */
 
-?>
+if (!defined('DATALIFEENGINE')) {
+    http_response_code(403);
+    exit('Access denied');
+}
 
-<div class="cabinet-block__name"><div class="span"></div>Управление балансом</div>
+if (!isset($member_id['name'])) {
+    header("Location: /");
+    exit;
+}
 
-<div class="row">
-	<div class="col-xl-6 col-md-12 mt-4 mb-4">
-		<div class="cabinet-balance__value"><?= $member_id['balance']?><span>руб.</span></div>
-	</div>
-	<div class="col-xl-6 col-md-12 mt-4 mb-4">
-		<button type="button" class="cabinet-small-buttons" data-toggle="modal" data-target="#paycabinet"><i class="fas fa-plus"></i> Пополнить</button>
-	</div>
-</div>
+$redirect = CABINET_URL;
+
+$name = $db->safesql($member_id['name']);
+
+// Получаем баланс
+$user = $db->super_query("SELECT balance FROM cabinet_balance WHERE name='{$name}'");
+
+$balance = isset($user['balance']) ? (float)$user['balance'] : 0.0;
+
+// Пополнение (пример)
+if (isset($_POST['amount'])) {
+
+    $amount = (float)$_POST['amount'];
+
+    if ($amount <= 0) {
+        dumpErrors("Ошибка", "Некорректная сумма");
+        header("Location: $redirect");
+        exit;
+    }
+
+    // Обновление баланса
+    if ($user) {
+        $db->query("UPDATE cabinet_balance SET balance = balance + {$amount} WHERE name='{$name}'");
+    } else {
+        $db->query("INSERT INTO cabinet_balance (name, balance) VALUES ('{$name}', {$amount})");
+    }
+
+    dumpErrors("Успешно", "Баланс пополнен");
+    header("Location: $redirect");
+    exit;
+}

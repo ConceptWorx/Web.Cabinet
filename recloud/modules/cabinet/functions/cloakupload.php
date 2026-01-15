@@ -1,91 +1,71 @@
 <?php
-if (!defined('DATALIFEENGINE')) die("Error!");
 /**
- * Функция загрузки плаща на сервер
- * =======================================================
- * Автор:	GamerVII
- * URL:  	https://vk.com/gamervii
- * email:	gamervii.phone@gmail.com
- * =======================================================
- * Файл:  cloakupload.php
- * -------------------------------------------------------
- * Версия: 1.0.2 (05.07.2019)
- * =======================================================
+ * Загрузка плаща (PHP 8.3 compatible)
  */
-$privilage = $db->super_query("SELECT * FROM `cabinet_permissions` WHERE `name` = '{$member_id['name']}'");
 
-$uploadCloak = $privilage['cloak'];
-$uploadHDCloak = $privilage['hd_cloak'];
-
-$redirect = "http://".$_SERVER['HTTP_HOST']."/cabinet.html";
-
-if (isset($_FILES['cloak'])) {
-
-	$username = $member_id['name'];
-	$fileName = $_FILES['cloak']['name'];
-	$fileSize = $_FILES['cloak']['size'];
-	$fileTmp = $_FILES['cloak']['tmp_name'];
-	$fileType = $_FILES['cloak']['type'];
-	$fileExt = strtolower(end(explode('.', $_FILES['cloak']['name'])));
-	$imageCloakInfo = getimagesize($_FILES['cloak']['tmp_name']);
-
-	if ($fileType == null) {
-		dumpErrors("Ошибка", "Вы не выбрали файл для загрузки");
-		header("Location: $redirect");
-	}elseif ($fileType == "image/png") {
-		if ($uploadCloak == 1) {
-			if ($uploadHDCloak == 1) {
-				if ($imageCloakInfo["0"] == "1024" || $imageCloakInfo["0"] == "256" || $imageCloakInfo["0"] == "512" || $imageCloakInfo["0"] == "64") {
-					if ($imageCloakInfo["1"] == "512" || $imageCloakInfo["1"] == "128" || $imageCloakInfo["1"] == "256" || $imageCloakInfo["1"] == "32") {
-						move_uploaded_file($fileTmp, "./recloud/modules/cabinet/uploads/cloaks/". $username .".png");
-
-						dumpErrors("Успешно", "Плащ загружен");
-						header("Location: $redirect");
-					}else{
-						dumpErrors("Ошибка", "Неверный размер плаща");
-						header("Location: $redirect");
-					}
-				}else{
-					dumpErrors("Ошибка", "Неверный размер плаща");
-					header("Location: $redirect");
-				}
-			}elseif ($imageCloakInfo["0"] == "64") {
-				if ($imageCloakInfo["1"] == "32") {
-					move_uploaded_file($fileTmp, "./recloud/modules/cabinet/uploads/cloaks/". $username .".png");
-
-					dumpErrors("Успешно", "Плащ загружен");
-					header("Location: $redirect");
-				}else{
-					dumpErrors("Ошибка", "Неверный размер скина, или вы пытаетесь установить HD плащ");
-					header("Location: $redirect");
-				}
-			}else{
-				dumpErrors("Ошибка", "Неверный размер скина, или вы пытаетесь установить HD плащ");
-				header("Location: $redirect");
-			}
-		}else{
-			dumpErrors("Ошибка", "Вы не можете загружать плащ");
-			header("Location: $redirect");
-		}
-	}else{
-		dumpErrors("Ошибка", "Файл должен быть в формате png");
-		header("Location: $redirect");
-	}
+if (!defined('DATALIFEENGINE')) {
+    http_response_code(403);
+    exit('Access denied');
 }
-?>
 
-<form action method="post" enctype="multipart/form-data">
-	<div class="row cabinet-file-upload">
-		<div class="col-xl-6 col-md-12">
-			<div class="cabinet-form-group">
-				<input type="file" name="cloak" class="input-file__cloak">
-				<label for="file" class="cabinet-file js-labelFile mb-2">
-					<span class="js-fileName">Выбрать Плащ</span>
-				</label>
-			</div>
-		</div>
-		<div class="col-xl-6 col-md-12">
-			<input type="submit" value="Загрузить" class="cabinet-buttons">
-		</div>
-	</div>
-</form>
+if (!isset($member_id['name'])) {
+    header("Location: /");
+    exit;
+}
+
+$redirect = CABINET_URL;
+
+// Проверка файла
+if (
+    !isset($_FILES['cloak']) ||
+    $_FILES['cloak']['error'] !== UPLOAD_ERR_OK ||
+    empty($_FILES['cloak']['tmp_name'])
+) {
+    dumpErrors("Ошибка", "Файл не был загружен");
+    header("Location: $redirect");
+    exit;
+}
+
+// MIME
+$mime = mime_content_type($_FILES['cloak']['tmp_name']);
+if ($mime !== 'image/png') {
+    dumpErrors("Ошибка", "Файл должен быть в формате PNG");
+    header("Location: $redirect");
+    exit;
+}
+
+// Изображение
+$imageInfo = getimagesize($_FILES['cloak']['tmp_name']);
+if ($imageInfo === false) {
+    dumpErrors("Ошибка", "Файл не является изображением");
+    header("Location: $redirect");
+    exit;
+}
+
+$width  = (int)$imageInfo[0];
+$height = (int)$imageInfo[1];
+
+// Проверка размера плаща (Minecraft)
+if (!(($width === 64 && $height === 32) || ($width === 64 && $height === 64))) {
+    dumpErrors("Ошибка", "Неверный размер плаща");
+    header("Location: $redirect");
+    exit;
+}
+
+// Сохранение
+$targetDir = ROOT_DIR . "/recloud/modules/cabinet/uploads/cloaks/";
+if (!is_dir($targetDir)) {
+    mkdir($targetDir, 0755, true);
+}
+
+$targetFile = $targetDir . $member_id['name'] . ".png";
+
+if (!move_uploaded_file($_FILES['cloak']['tmp_name'], $targetFile)) {
+    dumpErrors("Ошибка", "Не удалось сохранить файл");
+    header("Location: $redirect");
+    exit;
+}
+
+dumpErrors("Успешно", "Плащ успешно загружен");
+header("Location: $redirect");
+exit;

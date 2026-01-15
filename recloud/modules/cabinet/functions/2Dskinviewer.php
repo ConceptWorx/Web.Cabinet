@@ -11,6 +11,17 @@
  * Версия: 1.0.1 (03.07.2019)
  * =======================================================
  */
+ if (!defined('DATALIFEENGINE')) {
+     http_response_code(403);
+     exit('Access denied');
+ }
+ 
+ if (!isset($member_id['name'])) {
+     header("Location: /");
+     exit;
+ }
+
+ 
 ?>
 <div class="row">
 
